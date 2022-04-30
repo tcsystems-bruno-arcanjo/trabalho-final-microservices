@@ -1,0 +1,101 @@
+version: '3.9'
+
+services:
+  pg-master:
+    build: './database'
+    image: 'fit/postgres-replication:1.0.0-SNAPSHOT'
+    container_name: 'pg-master'
+    restart: 'always'
+    environment:
+      POSTGRES_USER: 'postgres'
+      POSTGRES_PASSWORD: 'postgres'
+      POSTGRES_DB: 'microservices'
+      PGDATA: '/var/lib/postgresql/data/pgdata'
+    volumes:
+     - '/var/lib/postgresql/data'
+    networks:
+      - microservices
+
+  pg-slave:
+    build: './database'
+    image: 'fit/postgres-replication'
+    container_name: 'pg-slave'
+    restart: 'always'
+    depends_on: ['pg-master']
+    environment:
+      POSTGRES_USER: 'postgres'
+      POSTGRES_PASSWORD: 'postgres'
+      POSTGRES_DB: 'microservices'
+      PGDATA: '/var/lib/postgresql/data/pgdata'
+      REPLICATE_FROM: 'pg-master'
+    volumes:
+     - '/var/lib/postgresql/data'
+    networks:
+      - microservices
+
+  database-updater:
+    image: fit/database-updater:1.0.0-SNAPSHOT
+    container_name: databaese-updater
+    restart: always
+    depends_on: ['pg-master']
+    environment:
+      FLYWAY_URL: ${FLYWAY_URL}
+      FLYWAY_USER: ${FLYWAY_USER}
+      FLYWAY_PASSWORD: ${FLYWAY_PASSWORD}
+    networks:
+      - microservices
+
+  conta-corrente:
+    image: fit/conta-corrente:1.0.0-SNAPSHOT
+    container_name: conta-corrente
+    restart: always
+    depends_on: ['database-updater']
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      DATABASE_USERNAME: ${DATABASE_USERNAME}
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD}
+    networks:
+      - microservices
+
+  cartao-credito:
+    image: fit/cartao-credito:1.0.0-SNAPSHOT
+    container_name: cartao-credito
+    restart: always
+    depends_on: ['conta-corrente']
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      DATABASE_USERNAME: ${DATABASE_USERNAME}
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD}
+      CONTA_SERVICE_URL: ${CONTA_SERVICE_URL}
+    networks:
+      - microservices
+
+  investimento:
+    image: fit/investimento:1.0.0-SNAPSHOT
+    container_name: investimento
+    restart: always
+    depends_on: ['conta-corrente']
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      DATABASE_USERNAME: ${DATABASE_USERNAME}
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD}
+      CONTA_SERVICE_URL: ${CONTA_SERVICE_URL}
+    networks:
+      - microservices
+
+  gateway:
+    image: fit/gateway:1.0.0-SNAPSHOT
+    container_name: gateway
+    restart: always
+    depends_on: ['conta-corrente', 'cartao-credito', 'investimento']
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      DATABASE_USERNAME: ${DATABASE_USERNAME}
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD}
+    ports:
+      - '8765:8765'
+    networks:
+      - microservices
+
+networks:
+  microservices:
